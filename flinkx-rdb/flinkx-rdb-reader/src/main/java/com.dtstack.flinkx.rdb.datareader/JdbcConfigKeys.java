@@ -44,6 +44,8 @@ public class JdbcConfigKeys {
 
     public static final String KEY_START_LOCATION = "startLocation";
 
+    public static final String KEY_END_LOCATION = "endLocation";
+
     public static final String KEY_CUSTOM_SQL = "customSql";
 
     public static final String KEY_ORDER_BY_COLUMN = "orderByColumn";

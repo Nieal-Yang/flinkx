@@ -29,6 +29,7 @@ import com.dtstack.flinkx.rdb.util.DBUtil;
 import com.dtstack.flinkx.reader.DataReader;
 import com.dtstack.flinkx.reader.MetaColumn;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.Row;
@@ -39,8 +40,8 @@ import java.util.List;
 /**
  * The Reader plugin for multiple databases that can be connected via JDBC.
  *
- * @Company: www.dtstack.com
  * @author jiangbo
+ * @Company: www.dtstack.com
  */
 public class DistributedJdbcDataReader extends DataReader {
 
@@ -64,6 +65,8 @@ public class DistributedJdbcDataReader extends DataReader {
 
     protected int queryTimeOut;
 
+    protected DistributedIncrementConfig incrementConfig;
+
     protected List<ReaderConfig.ParameterConfig.ConnectionConfig> connectionConfigs;
 
     private static String DISTRIBUTED_TAG = "d";
@@ -78,9 +81,10 @@ public class DistributedJdbcDataReader extends DataReader {
         metaColumns = MetaColumn.getMetaColumns(readerConfig.getParameter().getColumn());
         splitKey = readerConfig.getParameter().getStringVal(JdbcConfigKeys.KEY_SPLIK_KEY);
         connectionConfigs = readerConfig.getParameter().getConnection();
-        fetchSize = readerConfig.getParameter().getIntVal(JdbcConfigKeys.KEY_FETCH_SIZE,0);
-        queryTimeOut = readerConfig.getParameter().getIntVal(JdbcConfigKeys.KEY_QUERY_TIME_OUT,0);
+        fetchSize = readerConfig.getParameter().getIntVal(JdbcConfigKeys.KEY_FETCH_SIZE, 0);
+        queryTimeOut = readerConfig.getParameter().getIntVal(JdbcConfigKeys.KEY_QUERY_TIME_OUT, 0);
         pluginName = readerConfig.getName();
+        buildIncrementConfig(readerConfig);
     }
 
     @Override
@@ -100,12 +104,12 @@ public class DistributedJdbcDataReader extends DataReader {
         builder.setWhere(where);
         builder.setFetchSize(fetchSize == 0 ? databaseInterface.getFetchSize() : fetchSize);
         builder.setQueryTimeOut(queryTimeOut == 0 ? databaseInterface.getQueryTimeout() : queryTimeOut);
-
-        RichInputFormat format =  builder.finish();
+        builder.setIncrementConfig(incrementConfig);
+        RichInputFormat format = builder.finish();
         return createInput(format, (databaseInterface.getDatabaseType() + DISTRIBUTED_TAG + "reader").toLowerCase());
     }
 
-    protected List<DataSource> buildConnections(){
+    protected List<DataSource> buildConnections() {
         List<DataSource> sourceList = new ArrayList<>(connectionConfigs.size());
         for (ReaderConfig.ParameterConfig.ConnectionConfig connectionConfig : connectionConfigs) {
             String curUsername = (StringUtils.isBlank(connectionConfig.getUsername())) ? username : connectionConfig.getUsername();
@@ -117,7 +121,6 @@ public class DistributedJdbcDataReader extends DataReader {
                 source.setUserName(curUsername);
                 source.setPassword(curPassword);
                 source.setJdbcUrl(curJdbcUrl);
-
                 sourceList.add(source);
             }
         }
@@ -128,4 +131,46 @@ public class DistributedJdbcDataReader extends DataReader {
     public void setDatabaseInterface(DatabaseInterface databaseInterface) {
         this.databaseInterface = databaseInterface;
     }
+
+    private void buildIncrementConfig(ReaderConfig readerConfig) {
+        Object incrementColumn = readerConfig.getParameter().getVal(JdbcConfigKeys.KEY_INCRE_COLUMN);
+        String startLocation = readerConfig.getParameter().getStringVal(JdbcConfigKeys.KEY_START_LOCATION, null);
+        String endLocation = readerConfig.getParameter().getStringVal(JdbcConfigKeys.KEY_END_LOCATION, null);
+
+        incrementConfig = new DistributedIncrementConfig();
+        if (incrementColumn != null && org.apache.commons.lang3.StringUtils.isNotEmpty(incrementColumn.toString())) {
+            String type = null;
+            String name = null;
+            int index = -1;
+
+            String incrementColStr = String.valueOf(incrementColumn);
+            if (NumberUtils.isNumber(incrementColStr)) {
+                MetaColumn metaColumn = metaColumns.get(Integer.parseInt(incrementColStr));
+                type = metaColumn.getType();
+                name = metaColumn.getName();
+                index = metaColumn.getIndex();
+            } else {
+                for (MetaColumn metaColumn : metaColumns) {
+                    if (metaColumn.getName().equals(incrementColStr)) {
+                        type = metaColumn.getType();
+                        name = metaColumn.getName();
+                        index = metaColumn.getIndex();
+                        break;
+                    }
+                }
+            }
+
+            incrementConfig.setIncrement(true);
+            incrementConfig.setColumnName(name);
+            incrementConfig.setColumnType(type);
+            incrementConfig.setStartLocation(startLocation);
+            incrementConfig.setEndLocation(endLocation);
+            incrementConfig.setColumnIndex(index);
+
+            if (type == null || name == null) {
+                throw new IllegalArgumentException("There is no " + incrementColStr + " field in the columns");
+            }
+        }
+    }
+
 }

@@ -21,6 +21,8 @@ package com.dtstack.flinkx.rdb.inputformat;
 import com.dtstack.flinkx.inputformat.RichInputFormatBuilder;
 import com.dtstack.flinkx.rdb.DataSource;
 import com.dtstack.flinkx.rdb.DatabaseInterface;
+import com.dtstack.flinkx.rdb.datareader.DistributedIncrementConfig;
+import com.dtstack.flinkx.rdb.datareader.IncrementConfig;
 import com.dtstack.flinkx.rdb.loader.JdbcFormatLoader;
 import com.dtstack.flinkx.rdb.type.TypeConverterInterface;
 import com.dtstack.flinkx.reader.MetaColumn;
@@ -90,6 +92,10 @@ public class DistributedJdbcInputFormatBuilder extends RichInputFormatBuilder {
 
     public void setQueryTimeOut(int queryTimeOut){
         format.queryTimeOut = queryTimeOut;
+    }
+
+    public void setIncrementConfig(DistributedIncrementConfig incrementConfig){
+        format.incrementConfig = incrementConfig;
     }
 
     @Override
